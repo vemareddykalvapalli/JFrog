@@ -1,0 +1,59 @@
+name: Java CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    # 1️⃣ Checkout code from GitHub
+    - name: Checkout source code
+      uses: actions/checkout@v4
+
+    # 2️⃣ Setup Java
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+
+    # 3️⃣ Build with Maven
+    - name: Build with Maven
+      run: mvn clean package -DskipTests
+
+    # 4️⃣ Upload artifact to JFrog
+    - name: Upload artifact to JFrog Artifactory
+      run: |
+        curl -u ${{ secrets.JFROG_USERNAME }}:${{ secrets.JFROG_API_KEY }} \
+        -T target/*.war \
+        "${{ secrets.JFROG_URL }}/artifactory/libs-release-local/myapp/myapp.war"
+
+    # 5️⃣ Download artifact from JFrog
+    - name: Download artifact from JFrog
+      run: |
+        curl -u ${{ secrets.JFROG_USERNAME }}:${{ secrets.JFROG_API_KEY }} \
+        -O "${{ secrets.JFROG_URL }}/artifactory/libs-release-local/myapp/myapp.war"
+
+    # 6️⃣ Deploy to Tomcat on AWS EC2
+    - name: Deploy to Tomcat on EC2
+      uses: appleboy/scp-action@v0.1.7
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ${{ secrets.EC2_USER }}
+        key: ${{ secrets.EC2_SSH_KEY }}
+        source: "myapp.war"
+        target: ${{ secrets.TOMCAT_PATH }}
+
+    # 7️⃣ Restart Tomcat
+    - name: Restart Tomcat
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ${{ secrets.EC2_USER }}
+        key: ${{ secrets.EC2_SSH_KEY }}
+        script: |
+          sudo systemctl restart tomcat
